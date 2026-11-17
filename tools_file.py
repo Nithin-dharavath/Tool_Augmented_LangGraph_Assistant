@@ -3,6 +3,7 @@ from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
+from rag_tool import rag_tool_func
 
 llm = ChatGroq(
     model = "openai/gpt-oss-20b",
@@ -30,19 +31,8 @@ def calculator(a : float, b : float, operation : str) -> dict:
 ducksearch = DuckDuckGoSearchRun()
 
 
-toollist = [calculator, ducksearch]
+toollist = [calculator, ducksearch, rag_tool_func]
 
 llm_with_tools = llm.bind_tools(toollist)
 
 tool_node = ToolNode(toollist)
-
-
-# graph = StateGraph(chatstate)
-# graph.add_node("chatnode", chatnode)
-# graph.add_node("tools", tool_node)
-
-# graph.add_edge(START, "chatnode")
-# graph.add_conditional_edges("chatnode", tools_condition)
-# graph.add_edge("tools", "chatnode")
-# workflow = graph.compile()
-# workflow
