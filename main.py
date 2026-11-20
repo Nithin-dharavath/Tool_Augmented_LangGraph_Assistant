@@ -7,6 +7,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import tools_condition
 
 from langchain_groq import ChatGroq
+from langchain_core.messages.utils import trim_messages, count_tokens_approximately
 from langchain_core.messages import HumanMessage, AIMessage
 
 from pydantic import BaseModel
@@ -48,7 +49,13 @@ def generate_thread_id():
 
 def chatbot_func(state: WokflowState):
     """Give the answer to human message or use the tools if needed"""
-    response = llm_with_tools.invoke(state["messages"])
+    trim__messages = trim_messages(
+        state["messages"],
+        strategy = "last",
+        count_tokens = count_tokens_approximately,
+        max_tokens = 200 
+    )
+    response = llm_with_tools.invoke(trim__messages)
     return {
         "messages": [response]
     }

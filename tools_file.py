@@ -4,6 +4,7 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 from rag_tool import rag_tool_func
+from langgraph.types import interrupt, Command
 
 llm = ChatGroq(
     model = "openai/gpt-oss-20b",
@@ -16,6 +17,14 @@ load_dotenv()
 def calculator(a : float, b : float, operation : str) -> dict:
     """Given the two numbers a and b perform arthermetic operations avaliable:
     add, sub, multiply, division"""
+    decision = interrupt({
+        "type" : "approval",
+        "question" : f"""AI is going to use {operation} appprove or restictate it ?"""
+    })
+
+    if decision["approved"] == "NO":
+        return {"message" : "Tool is rejected by user"}
+        
     if operation == "addition":
         return {"result" : (a + b)}
     elif operation == "subtraction":

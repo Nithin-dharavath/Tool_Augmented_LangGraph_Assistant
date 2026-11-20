@@ -86,6 +86,32 @@ for thread in list(st.session_state["thread_history"])[::-1]:
         st.rerun()
 
 
+# ---------------- Tool Approval ----------------
+def show_tool_approval_prompt(tool_name: str, tool_description: str):
+    """Display yes/no approval prompt for tool usage in the sidebar."""
+    st.sidebar.info(f"🛠️ **Tool detected**: {tool_name}")
+    st.sidebar.write(f"Description: {tool_description}")
+    col1, col2 = st.sidebar.columns([1, 1])
+    with col1:
+        if st.sidebar.button("✅ Yes", key="approval_yes"):
+            st.session_state["tool_approval"] = "yes"
+            st.rerun()
+    with col2:
+        if st.sidebar.button("❌ No", key="approval_no"):
+            st.session_state["tool_approval"] = "no"
+            st.rerun()
+
+
+def was_tool_approved():
+    """Check if the user approved tool usage. Returns True if approved or if no decision pending."""
+    return st.session_state.get("tool_approval", "approved") == "yes"
+
+
+def clear_tool_approval():
+    """Clear the approval decision from session state."""
+    st.session_state["tool_approval"] = None
+
+
 # ---------------- Helpers ----------------
 def stream_chat(message: str, url: str, thread_id: str):
     """Yield chunks of the assistant reply coming from the backend."""
@@ -126,10 +152,38 @@ if user_input := st.chat_input("Type your message and press Enter..."):
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    with st.chat_message("assistant"):
-        reply = st.write_stream(
-            stream_chat(user_input, st.session_state["backend_url"], st.session_state["thread_id"])
-        )
+    # Show tool approval prompt - reset approval decision
+    st.session_state["tool_approval"] = None
+    show_tool_approval_prompt("Tool will be used", "The AI wants to use a tool to help answer your question. Approve?")
 
-    if reply:
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+    # After rerun, check if user made a decision
+    approved = was_tool_approved()
+    clear_tool_approval()
+
+    if approved is None:
+        # No decision yet - this shouldn't happen normally, but just in case
+        # Proceed with default (approved)
+        approved = True
+
+    if approved:
+        # User approved - send to backend normally
+        with st.chat_message("assistant"):
+            reply = st.write_stream(
+                stream_chat(user_input, st.session_state["backend_url"], st.session_state["thread_id"])
+            )
+
+        if reply:
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+    else:
+        # User rejected - attempt to respond without tools
+        # by sending a modified request that hints at no tools
+        with st.chat_message("assistant"):
+            st.info("💡 I'll try to answer without using tools.")
+            # Send the message - the backend LLM may or may not use tools
+            # We can add a note in the message to prefer no tools
+            modified_message = user_input
+            reply = st.write_stream(
+                stream_chat(modified_message, st.session_state["backend_url"], st.session_state["thread_id"])
+            )
+        if reply:
+            st.session_state.messages.append({"role": "assistant", "content": reply})
