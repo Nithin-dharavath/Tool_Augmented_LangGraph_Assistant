@@ -19,11 +19,11 @@ import os
 import uuid
 import sqlite3
 
+from summarise import summarise_stlm
 
 load_dotenv()
 
 app = FastAPI()
-
 
 from tools_file import tool_node, llm_with_tools
 
@@ -38,6 +38,8 @@ llm = ChatGroq(
 
 class WokflowState(TypedDict):
     messages: Annotated[list, add_messages]
+    summary : str
+
 
 class ChatRequest(BaseModel):
     human_message: str
@@ -47,18 +49,44 @@ class ChatRequest(BaseModel):
 def generate_thread_id():
     return str(uuid.uuid4())
 
+
 def chatbot_func(state: WokflowState):
     """Give the answer to human message or use the tools if needed"""
+    # Step 1: First, try to summarize if needed (only when messages > 10 and no summary exists)
+    # This function returns state update; LangGraph will merge it
+    summary_update = summarise_stlm(state)
+    
+    # Step 2: Merge the summary from the update with existing state
+    # If a new summary was generated, use it; otherwise keep existing summary
+    new_summary = summary_update.get("summary", state.get("summary", ""))
+    
+    # Step 3: Get all messages - existing messages + any new summary message
+    # LangGraph's add_messages will handle concatenation when we return from the node
+    all_messages = state["messages"] + summary_update.get("messages", [])
+    
+    # Step 4: Trim messages to keep within token limits (keep last N tokens)
+    # This trims the full message list (including the summary message if present)
     trim__messages = trim_messages(
-        state["messages"],
+        all_messages,
         strategy = "last",
         count_tokens = count_tokens_approximately,
         max_tokens = 200 
     )
-    response = llm_with_tools.invoke(trim__messages)
+    
+    # Step 5: Prepare combined context for LLM
+    # If we have a summary, prepend it as context before the trimmed messages
+    # This way the LLM has both the summary context AND recent conversation
+    combined_messages = trim__messages
+    if new_summary:
+        # Prepend summary as a context message; trim_messages already kept it if within 200 tokens
+        combined_messages = [HumanMessage(content=f"Summary of conversation so far: {new_summary}")] + trim__messages
+    
+    # Step 6: Invoke the LLM with combined context (trimmed messages + summary)
+    response = llm_with_tools.invoke(combined_messages)
     return {
         "messages": [response]
     }
+
 
 def retrive_all_threads():
     all_threads = set()
@@ -83,6 +111,7 @@ checkpointer = SqliteSaver(conn = sqlite_connection)
 
 workflow = graph.compile(checkpointer=checkpointer)
 
+
 @app.post("/chat")
 def Chat_Response(request: ChatRequest):
     thread_id = request.thread_id or generate_thread_id()
@@ -99,6 +128,7 @@ def Chat_Response(request: ChatRequest):
                 yield chunk.content
 
     return StreamingResponse(generate_chunk(), media_type="text/plain")
+
 
 @app.get("/history/{thread_id}")
 def thread_history(thread_id: str):
