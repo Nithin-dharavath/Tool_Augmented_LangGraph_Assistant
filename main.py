@@ -10,8 +10,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages.utils import trim_messages, count_tokens_approximately
 from langchain_core.messages import HumanMessage, AIMessage
 
-from pydantic import BaseModel
-from typing import TypedDict, Annotated, Optional
+from schema import WorkflowState, ChatRequest
 
 from dotenv import load_dotenv
 
@@ -34,16 +33,6 @@ llm = ChatGroq(
     reasoning_effort = "low",
     max_tokens = 4021
 )
-
-
-class WokflowState(TypedDict):
-    messages: Annotated[list, add_messages]
-    summary : str
-
-
-class ChatRequest(BaseModel):
-    human_message: str
-    thread_id: Optional[str] = None
 
 
 def generate_thread_id():

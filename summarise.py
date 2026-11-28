@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_core.messages import HumanMessage
-from main import WokflowState, llm
+from main import llm
+from schema import WorkflowState
 
 
 def summarise_stlm(state: WokflowState):
